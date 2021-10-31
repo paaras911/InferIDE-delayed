@@ -56,10 +56,53 @@ async function configureAndStartClient(context: ExtensionContext) {
 
 	// Create the language client and start the client.
 	client = new LanguageClient('InferIDE', 'InferIDE', serverOptions, clientOptions);
+		//register showHTML feature 
+	client.registerFeature(new SupportsShowHTML(client));
 	client.start();
 
 
 	await client.onReady();
+}
+
+export class SupportsShowHTML implements DynamicFeature<undefined> {
+	
+	constructor(private _client: LanguageClient) {
+		
+    }
+
+	messages: RPCMessageType | RPCMessageType[];
+	fillInitializeParams?: (params: InitializeParams) => void;
+	fillClientCapabilities(capabilities: ClientCapabilities): void {
+		capabilities.experimental = {
+			supportsShowHTML: true, 
+		}
+	}
+
+	initialize(capabilities: ServerCapabilities<any>, documentSelector: DocumentSelector): void {
+	
+		let client = this._client;
+		
+		const panel = window.createWebviewPanel("Web Page", "MagpieBridge Web Page",ViewColumn.One,{
+			enableScripts: true ,
+			retainContextWhenHidden: true
+		});
+        client.onNotification("magpiebridge/showHTML",(content: string)=>{	
+			
+			 panel.webview.html = content;
+			
+			})
+	}
+
+	register(message: RPCMessageType, data: RegistrationData<undefined>): void {
+
+	}
+	unregister(id: string): void {
+
+	}
+	dispose(): void {
+
+	}
+
 }
 
 export async function activate(context: ExtensionContext) {
