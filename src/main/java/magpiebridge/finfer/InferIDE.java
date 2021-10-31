@@ -36,7 +36,7 @@ public class InferIDE {
             .addOption(
                 "a",
                 "auto",
-                true,
+                false,
                 MessageFormat.format(
                     "enables auto mode and sets the timeout in minutes for starting the automatic tool analysis\n default timeout is {0}",
                     DEFAULT_TIMEOUT))
@@ -87,11 +87,12 @@ public class InferIDE {
           ServerConfiguration config = new ServerConfiguration();
           config.setDoAnalysisBySave(false);
           if (!auto) {
+            config.setDoAnalysisByFirstOpen(true);
             config.setDoAnalysisByOpen(false);
             config.setShowConfigurationPage(true, true);
           } else {
-            config.setDoAnalysisByOpen(true);
-            config.setDoAnalysisByIdle(true, timeout * 60 * 1000);
+            config.setDoAnalysisByOpen(false);
+            config.setDoAnalysisByIdle(false, timeout * 60 * 1000);
           }
           MagpieServer server = new MagpieServer(config);
           String language = "java";
@@ -100,6 +101,7 @@ public class InferIDE {
           ToolAnalysis analysis = new InferServerAnalysis(dockerImage);
           Either<ServerAnalysis, ToolAnalysis> either = Either.forRight(analysis);
           server.addAnalysis(either, language);
+          config.setShowConfigurationPage(false, true);
           return server;
         };
     if (cmd.hasOption("socket")) {

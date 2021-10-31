@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import magpiebridge.core.AnalysisConsumer;
 import magpiebridge.core.AnalysisResult;
@@ -117,39 +118,45 @@ public class InferServerAnalysis implements ToolAnalysis {
           File file = new File(InferServerAnalysis.this.reportPath);
           if (file.exists()) {
             Collection<AnalysisResult> results = convertToolOutput();
-            if (!results.isEmpty()) server.consume(results, source());
+            if (!results.isEmpty()) {
+              try {
+                TimeUnit.SECONDS.sleep(60);
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
+              server.consume(results, source());
+            }
           }
         }
       }
-
-      if (rerun && this.rootPath != null) {
-        server.submittNewTask(
-            () -> {
-              try {
-                File report = new File(InferServerAnalysis.this.reportPath);
-                if (report.exists()) report.delete();
-                Process runInfer = this.runCommand(new File(InferServerAnalysis.this.rootPath));
-                StreamGobbler stdOut =
-                    new StreamGobbler(runInfer.getInputStream(), e -> handleError(server, e));
-                StreamGobbler stdErr =
-                    new StreamGobbler(runInfer.getErrorStream(), e -> handleError(server, e));
-                stdOut.start();
-                stdErr.start();
-                if (runInfer.waitFor() == 0) {
-                  File file = new File(InferServerAnalysis.this.reportPath);
-                  if (file.exists()) {
-                    Collection<AnalysisResult> results = convertToolOutput();
-                    server.consume(results, source());
-                  }
-                } else {
-                  server.forwardMessageToClient(
-                      new MessageParams(MessageType.Error, String.join("\n", stdErr.getOutput())));
+    }
+    if (rerun && this.rootPath != null) {
+      server.submittNewTask(
+          () -> {
+            try {
+              File report = new File(InferServerAnalysis.this.reportPath);
+              if (report.exists()) report.delete();
+              Process runInfer = this.runCommand(new File(InferServerAnalysis.this.rootPath));
+              StreamGobbler stdOut =
+                  new StreamGobbler(runInfer.getInputStream(), e -> handleError(server, e));
+              StreamGobbler stdErr =
+                  new StreamGobbler(runInfer.getErrorStream(), e -> handleError(server, e));
+              stdOut.start();
+              stdErr.start();
+              if (runInfer.waitFor() == 0) {
+                File file = new File(InferServerAnalysis.this.reportPath);
+                if (file.exists()) {
+                  Collection<AnalysisResult> results = convertToolOutput();
+                  server.consume(results, source());
                 }
-              } catch (IOException | InterruptedException e) {
-                handleError(server, e);
+              } else {
+                server.forwardMessageToClient(
+                    new MessageParams(MessageType.Error, String.join("\n", stdErr.getOutput())));
               }
-            });
-      }
+            } catch (IOException | InterruptedException e) {
+              handleError(server, e);
+            }
+          });
     }
   }
 
@@ -223,6 +230,7 @@ public class InferServerAnalysis implements ToolAnalysis {
         Position pos = SourceCodePositionFinder.findCode(new File(file), line).toPosition();
         String msg = bugType + ": " + qualifier;
         JsonArray trace = bug.get("bug_trace").getAsJsonArray();
+        String text = SourceCodePositionFinder.findCode(new File(file), line).code;
         ArrayList<Pair<Position, String>> traceList = new ArrayList<Pair<Position, String>>();
         if (showTrace) {
           for (int j = 0; j < trace.size(); j++) {
@@ -240,7 +248,7 @@ public class InferServerAnalysis implements ToolAnalysis {
         }
         AnalysisResult rbug =
             new InferResult(
-                Kind.Diagnostic, pos, msg, traceList, DiagnosticSeverity.Error, null, null);
+                Kind.Diagnostic, pos, msg, traceList, DiagnosticSeverity.Error, null, text);
         res.add(rbug);
       }
     } catch (JsonIOException | JsonSyntaxException | FileNotFoundException e) {
